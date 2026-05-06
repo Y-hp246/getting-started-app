@@ -1,22 +1,48 @@
-name: Docker Build Check
+name: Docker CI Pipeline
 
-# This tells GitHub WHEN to run the pipeline (Step 3 in the reading)
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
-# This tells GitHub WHAT to do
 jobs:
-  test-docker-build:
+  # Job 1: Static analysis of your Dockerfile
+  lint:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Grab the code from the GitHub repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Try to build the Docker image using the Alpine Dockerfile
-      - name: Test Docker Build
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  # Job 2: The actual build process
+  build:
+    needs: lint  # This connects the 'lint' block to this 'build' block
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
         run: docker build . -t my-todo-app:test
+
+  # Job 3: Scanning the image for vulnerabilities
+  security-scan:
+    needs: build # This block only appears/runs after the build is successful
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # Using Trivy to scan the image we just thought about building
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'my-todo-app:test'
+          format: 'table'
+          exit-code: '1' # Fails the pipeline if major issues are found
+          severity: 'CRITICAL,HIGH'
